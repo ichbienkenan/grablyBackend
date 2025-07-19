@@ -3,20 +3,17 @@ const cors = require("cors");
 const { exec } = require("child_process");
 const path = require("path");
 const fs = require("fs");
-const app = express();
 
+const app = express();
 app.use(cors());
 app.use(express.json());
 
-// Statik faylları /downloads URL-dən serve etmək üçün
+// downloads qovluğu yaradırıq sadəcə müvəqqəti fayllar üçün
 const downloadsDir = path.join(__dirname, "downloads");
-
-// downloads qovluğu yoxdursa yaradılır
 if (!fs.existsSync(downloadsDir)) {
   fs.mkdirSync(downloadsDir);
 }
 
-// Express-ə deyirik ki, /downloads altında statik fayllar var
 app.use("/downloads", express.static(downloadsDir));
 
 app.post("/api/download", (req, res) => {
@@ -26,15 +23,11 @@ app.post("/api/download", (req, res) => {
   }
 
   const filename = `video_${Date.now()}`;
-  const output = path.join(downloadsDir, `${filename}.%(ext)s`); // Məsələn: downloads/video_123456.mp4
-
-  const ytDlpPath = "C:\\Users\\User\\Downloads\\yt-dlp.exe";
-
-    const ytDlpCmd =
+  const output = path.join(downloadsDir, `${filename}.%(ext)s`);
+  const ytDlpCmd =
     format === "mp3"
-        ? `"${ytDlpPath}" -o "${output}" -x --audio-format mp3 "${url}"`
-        : `"${ytDlpPath}" -o "${output}" "${url}"`;
-
+      ? `yt-dlp -o "${output}" -x --audio-format mp3 "${url}"`
+      : `yt-dlp -o "${output}" "${url}"`;
 
   exec(ytDlpCmd, (error, stdout, stderr) => {
     if (error) {
@@ -43,25 +36,27 @@ app.post("/api/download", (req, res) => {
       return res.status(500).json({ error: "Download zamanı xəta baş verdi" });
     }
 
-    // yt-dlp işi bitəndə .mp3 və ya .mp4 faylı yaranır.
-    // İndi həmin faylın tam adı nədir, tapmaq lazımdır.
-
-    // yt-dlp bəzən başqa extension qoyur, ona görə downloads qovluğunu skan edirik.
     fs.readdir(downloadsDir, (err, files) => {
       if (err) {
         console.error("Fayl qovluğu oxunarkən xəta:", err);
         return res.status(500).json({ error: "Serverdə xəta baş verdi" });
       }
 
-      // Bizim fayl adı prefixi ilə başlayan faylları tapırıq
       const matchedFile = files.find(f => f.startsWith(filename));
-
       if (!matchedFile) {
         return res.status(500).json({ error: "Yüklənmiş fayl tapılmadı" });
       }
 
-      // İstifadəçi üçün URL hazırla
-      const downloadUrl = `${req.protocol}://${req.get('host')}/downloads/${matchedFile}`;
+      const filePath = path.join(downloadsDir, matchedFile);
+      const downloadUrl = `https://grably.onrender.com/downloads/${matchedFile}`;
+
+      // 1 dəqiqə sonra faylı sil
+      setTimeout(() => {
+        fs.unlink(filePath, (err) => {
+          if (err) console.error("Fayl silinərkən xəta:", err);
+          else console.log("Fayl silindi:", matchedFile);
+        });
+      }, 60 * 1000); // 1 dəqiqə = 60 * 1000 ms
 
       res.json({
         message: "Download tamamlandı",
