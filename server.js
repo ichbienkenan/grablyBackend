@@ -1,37 +1,44 @@
 const express = require("express");
 const cors = require("cors");
-const { exec } = require("child_process");
+const ytdl = require("ytdl-core");
 
 const app = express();
 app.use(cors());
 app.use(express.json());
 
-app.post("/api/download", (req, res) => {
+app.post("/api/download", async (req, res) => {
   const { url, format } = req.body;
 
   if (!url || !format) {
     return res.status(400).json({ error: "Url və format tələb olunur" });
   }
 
-  // yt-dlp komandası (birbaşa sistemdə quraşdırılmış)
-  const ytDlpCmd =
-    format === "mp3"
-      ? `yt-dlp -f bestaudio --extract-audio --audio-format mp3 --get-url "${url}"`
-      : `yt-dlp -f bestvideo+bestaudio --get-url "${url}"`;
+  try {
+    // format mp3 və ya mp4 ola bilər
+    const info = await ytdl.getInfo(url);
 
-  exec(ytDlpCmd, (error, stdout, stderr) => {
-    if (error) {
-      console.error("yt-dlp error:", error);
-      console.error("stderr:", stderr);
-      return res.status(500).json({ error: "Video linki əldə edilə bilmədi" });
+    let filter;
+    if (format === "mp3") {
+      filter = "audioonly";
+    } else {
+      filter = "videoandaudio";
     }
 
-    const directUrl = stdout.trim();
-    res.json({
-      message: "URL əldə olundu",
-      downloadUrl: directUrl,
-    });
-  });
+    res.header(
+      "Content-Disposition",
+      `attachment; filename="download.${format === "mp3" ? "mp3" : "mp4"}"`
+    );
+
+    ytdl(url, { filter })
+      .on("error", (err) => {
+        console.error("Yükləmə xətası:", err);
+        res.status(500).end("Yükləmə zamanı xəta baş verdi");
+      })
+      .pipe(res);
+  } catch (err) {
+    console.error("İnfo xətası:", err);
+    res.status(500).json({ error: "Video məlumatı alınmadı" });
+  }
 });
 
 const port = process.env.PORT || 5000;
