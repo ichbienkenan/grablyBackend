@@ -1,45 +1,35 @@
 const express = require("express");
 const cors = require("cors");
-const ytdl = require("ytdl-core");
+const play = require("play-dl");
 
 const app = express();
+const PORT = process.env.PORT || 3000;
+
 app.use(cors());
-app.use(express.json());
 
-app.post("/api/download", async (req, res) => {
-  const { url, format } = req.body;
+app.get("/download", async (req, res) => {
+  const url = req.query.url;
 
-  if (!url || !format) {
-    return res.status(400).json({ error: "Url və format tələb olunur" });
+  if (!url || !play.yt_validate(url)) {
+    return res.status(400).send("Yanlış və ya boş URL");
   }
 
   try {
-    // format mp3 və ya mp4 ola bilər
-    const info = await ytdl.getInfo(url);
+    const info = await play.video_basic_info(url);
+    const stream = await play.stream(url, { quality: 2 }); // best audio
 
-    let filter;
-    if (format === "mp3") {
-      filter = "audioonly";
-    } else {
-      filter = "videoandaudio";
-    }
+    const fileName = `${info.video_details.title.replace(/[^\w\s]/gi, "")}.mp3`;
 
-    res.header(
-      "Content-Disposition",
-      `attachment; filename="download.${format === "mp3" ? "mp3" : "mp4"}"`
-    );
+    res.setHeader("Content-Disposition", `attachment; filename="${fileName}"`);
+    res.setHeader("Content-Type", "audio/mpeg");
 
-    ytdl(url, { filter })
-      .on("error", (err) => {
-        console.error("Yükləmə xətası:", err);
-        res.status(500).end("Yükləmə zamanı xəta baş verdi");
-      })
-      .pipe(res);
+    stream.stream.pipe(res);
   } catch (err) {
-    console.error("İnfo xətası:", err);
-    res.status(500).json({ error: "Video məlumatı alınmadı" });
+    console.error("Yükləmə xətası:", err);
+    res.status(500).send("Yükləmə zamanı xəta baş verdi");
   }
 });
 
-const port = process.env.PORT || 5000;
-app.listen(port, () => console.log(`Server ${port} portunda işləyir`));
+app.listen(PORT, () => {
+  console.log(`✅ Server http://localhost:${PORT} ünvanında işləyir`);
+});
